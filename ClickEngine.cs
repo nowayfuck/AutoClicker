@@ -133,9 +133,9 @@ internal sealed class ClickEngine
         {
             var remainingMs = (target - Stopwatch.GetTimestamp()) * 1000.0 / Stopwatch.Frequency;
             if (remainingMs <= 0) return true;
-            if (remainingMs > 2)
-                token.WaitHandle.WaitOne(Math.Max(1, (int)(remainingMs - 1)));
-            else if (remainingMs > 0.3)
+            if (remainingMs >= 1.2)
+                token.WaitHandle.WaitOne(Math.Max(1, (int)(remainingMs - 0.2)));
+            else if (remainingMs > 0.15)
                 Thread.Yield();
             else
                 Thread.SpinWait(32);

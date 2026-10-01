@@ -44,7 +44,6 @@ internal sealed class MainForm : Form
     private Label detail = null!;
     private Label count = null!;
     private Label countTitle = null!;
-    private Label speedValue = null!;
     private Label delayValue = null!;
     private Label targetTitle = null!;
     private ModernButton startButton = null!;
@@ -148,18 +147,31 @@ internal sealed class MainForm : Form
 
         var settingsCard = AddCard(20, 348, 800, 198);
         AddLabel(settingsCard, "VELOCIDADE", 20, 16, 250, 19, 9, FontStyle.Bold, Palette.Muted);
-        speedValue = AddLabel(settingsCard, "", 352, 12, 105, 26, 13, FontStyle.Bold, Palette.Teal);
-        var speed = new ModernSlider(1, 100, settings.Cps)
+        var speed = new ModernSlider(500, 5000, settings.Cps)
         {
             Location = new Point(20, 42), Size = new Size(425, 34)
         };
-        speed.ValueChanged += (_, _) =>
-        {
-            settings.Cps = speed.Value;
-            speedValue.Text = $"{speed.Value} CPS";
-            SaveAndUpdate();
-        };
         settingsCard.Controls.Add(speed);
+        var speedInput = new NumericUpDown
+        {
+            Minimum = 500, Maximum = 5000, Increment = 100, Value = settings.Cps,
+            Location = new Point(333, 9), Size = new Size(101, 30),
+            BackColor = Palette.Frame, ForeColor = Palette.Teal,
+            Font = new Font("Segoe UI", 11, FontStyle.Bold),
+            BorderStyle = BorderStyle.FixedSingle, TextAlign = HorizontalAlignment.Right
+        };
+        settingsCard.Controls.Add(speedInput);
+        AddLabel(settingsCard, "CPS", 439, 12, 35, 26, 10, FontStyle.Bold, Palette.Teal);
+        void ApplyCps(int value)
+        {
+            if (settings.Cps == value) return;
+            settings.Cps = value;
+            if (speed.Value != value) speed.Value = value;
+            if (speedInput.Value != value) speedInput.Value = value;
+            SaveAndUpdate();
+        }
+        speed.ValueChanged += (_, _) => ApplyCps(speed.Value);
+        speedInput.ValueChanged += (_, _) => ApplyCps((int)speedInput.Value);
 
         AddLabel(settingsCard, "ATRASO INICIAL", 20, 99, 250, 19, 9, FontStyle.Bold, Palette.Muted);
         delayValue = AddLabel(settingsCard, "", 363, 95, 94, 26, 13, FontStyle.Bold, Palette.Amber);
@@ -211,7 +223,6 @@ internal sealed class MainForm : Form
         stopKey.KeyCaptured += (key, modifiers) => CaptureHotkey(false, key, modifiers);
         AddLabel(hotkeyCard, "QUALQUER TECLA", 530, 57, 230, 28, 10, FontStyle.Bold, Palette.Amber);
 
-        speedValue.Text = $"{settings.Cps} CPS";
         delayValue.Text = $"{settings.DelaySeconds} s";
         RefreshMode();
         RefreshState();
@@ -757,10 +768,11 @@ internal sealed class ModernSlider : Control
     private bool dragging;
     public event EventHandler? ValueChanged;
 
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public int Value
     {
         get => value;
-        private set
+        set
         {
             var next = Math.Clamp(value, minimum, maximum);
             if (this.value == next) return;

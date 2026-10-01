@@ -6,7 +6,7 @@ namespace AutoClicker;
 internal sealed class AppSettings
 {
     public ClickMode Mode { get; set; } = ClickMode.Mouse;
-    public int Cps { get; set; } = 10;
+    public int Cps { get; set; } = 500;
     public int DelaySeconds { get; set; } = 3;
     public MouseButton MouseButton { get; set; } = MouseButton.Left;
     public Keys Key { get; set; } = Keys.Space;
@@ -20,7 +20,7 @@ internal sealed class AppSettings
     {
         if (!Enum.IsDefined(Mode)) Mode = ClickMode.Mouse;
         if (!Enum.IsDefined(MouseButton)) MouseButton = MouseButton.Left;
-        Cps = Math.Clamp(Cps, 1, 100);
+        Cps = Math.Clamp(Cps, 500, 5000);
         DelaySeconds = Math.Clamp(DelaySeconds, 0, 10);
         if (!KeyOptions.IsUsable(Key)) Key = Keys.Space;
         Points ??= [];

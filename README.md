@@ -1,12 +1,12 @@
 # AutoClicker
 
-Autoclicker para Windows feito em **C# e Windows Forms**. Repete cliques do mouse, teclas ou uma sequência de pontos gravados na tela. Continua até você usar **Parar** ou o atalho configurado.
+Autoclicker para Windows feito em **C# e Windows Forms**. Repete cliques do mouse, teclas ou uma sequência de pontos gravados na tela. Não há limite total de cliques: continua até você usar **Parar** ou o atalho configurado.
 
 ## Baixar e usar
 
-1. Baixe [`release-pontos/AutoClicker.exe`](release-pontos/AutoClicker.exe) e abra no Windows 64 bits.
+1. Baixe [`release-5k/AutoClicker.exe`](release-5k/AutoClicker.exe) e abra no Windows 64 bits.
 2. Escolha **Mouse**, **Teclado** ou **Pontos**.
-3. Ajuste a velocidade entre **1 e 100 CPS** e, se necessário, o atraso inicial.
+3. Ajuste a velocidade entre **500 e 5.000 CPS** pelo slider ou digite o valor exato no campo numérico. Se necessário, ajuste o atraso inicial.
 4. Clique em **Iniciar** ou use **F6**. Para interromper, clique em **Parar** ou use **F7**.
 
 O executável é **autocontido e de arquivo único**. Para usá-lo, não é preciso instalar Python, .NET ou outras bibliotecas. As preferências e os pontos são salvos em `settings.json` na mesma pasta do executável.
@@ -27,7 +27,7 @@ O botão **?** na janela abre esse tutorial. A velocidade é o **total de clique
 | Mouse | Clica com o botão escolhido na posição atual do cursor. |
 | Teclado | Repete a tecla capturada ao clicar no campo e pressioná-la. Aceita as teclas virtuais que o Windows entrega ao aplicativo, incluindo teclas de mídia e função. |
 | Pontos | Repete as posições gravadas, com seus botões e sua ordem originais. |
-| Velocidade | Ajusta de 1 a 100 ações por segundo, inclusive durante a execução. |
+| Velocidade | Ajusta a meta de 500 a 5.000 ações por segundo, inclusive durante a execução. |
 | Atraso inicial | Espera de 0 a 10 segundos antes da primeira ação. |
 | Atalhos globais | Clique nos campos **Iniciar** e **Parar** para escolher a tecla desejada. O app verifica se o Windows aceita o atalho antes de salvá-lo. |
 
@@ -37,17 +37,17 @@ As teclas padrão são **F6** para iniciar e **F7** para parar. A tecla repetida
 
 O núcleo usa a API `SendInput` do Windows para enviar os eventos. O agendamento usa um relógio de alta resolução, espera cancelável e resolução de temporizador de 1 ms enquanto está ativo. A interface continua separada do loop de entrada. No modo Pontos, um hook de mouse registra os cliques reais fora do aplicativo e ignora eventos simulados; a reprodução usa coordenadas absolutas da área de trabalho virtual, inclusive em múltiplos monitores.
 
-O limite configurável é de **100 CPS**. A taxa efetiva depende do Windows, da carga da máquina e do aplicativo que recebe os cliques; não há promessa de desempenho superior a outros programas.
+A faixa configurável é de **500 a 5.000 CPS**, sem limite de duração ou total de cliques. Em taxas altas, o agendador pode ocupar bastante CPU. A taxa efetiva depende do Windows, da carga da máquina e do aplicativo que recebe os eventos; o contador representa entradas enviadas com sucesso pelo Windows, não confirma que cada clique foi processado pelo jogo ou site.
 
 ## Compilar a partir do código
 
 Para desenvolver ou recompilar, instale o SDK do .NET 10 e execute nesta pasta:
 
 ```powershell
-dotnet publish AutoClicker.csproj -c Release -r win-x64 --self-contained true -o release-pontos
+dotnet publish AutoClicker.csproj -c Release -r win-x64 --self-contained true -o release-5k
 ```
 
-O resultado será `release-pontos/AutoClicker.exe`, em pasta separada para não substituir uma instância anterior que ainda esteja aberta nem compartilhar a configuração dela.
+O resultado será `release-5k/AutoClicker.exe`, em pasta separada para não substituir uma instância anterior que ainda esteja aberta nem compartilhar a configuração dela.
 
 ## Observações
 
