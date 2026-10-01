@@ -1,0 +1,9 @@
+bin/
+obj/
+dist/
+.venv/
+__pycache__/
+settings.json
+release/settings.json
+*.pdb
+preview.png
