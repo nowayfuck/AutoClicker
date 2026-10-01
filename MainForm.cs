@@ -51,6 +51,10 @@ internal sealed class MainForm : Form
     private ModernButton stopButton = null!;
     private ModernButton mouseMode = null!;
     private ModernButton keyboardMode = null!;
+    private ModernButton pointsMode = null!;
+    private ModernButton recordButton = null!;
+    private ModernButton viewPointsButton = null!;
+    private ModernButton clearPointsButton = null!;
     private ModernButton[] mouseButtons = null!;
     private KeyCaptureBox targetKey = null!;
     private KeyCaptureBox startKey = null!;
@@ -58,6 +62,9 @@ internal sealed class MainForm : Form
     private string? notice;
     private DateTime noticeUntil;
     private bool hotkeysAvailable;
+    private bool tutorialShown;
+    private MouseRecorder? recorder;
+    private readonly List<TouchPoint> recordedDraft = [];
 
     public MainForm()
     {
@@ -67,7 +74,7 @@ internal sealed class MainForm : Form
         BackColor = Palette.Background;
         ForeColor = Palette.Text;
         Font = new Font("Segoe UI", 10f);
-        ClientSize = new Size(840, 700);
+        ClientSize = new Size(840, 680);
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
@@ -98,6 +105,8 @@ internal sealed class MainForm : Form
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
         updateTimer.Stop();
+        recorder?.Dispose();
+        recorder = null;
         engine.Stop();
         if (IsHandleCreated)
         {
@@ -120,26 +129,27 @@ internal sealed class MainForm : Form
 
     private void BuildUi()
     {
-        AddLabel(this, "AUTOCLICKER  /  WINDOWS", 21, 17, 500, 23, 9, FontStyle.Bold, Palette.Teal);
-        AddLabel(this, "Clique contínuo", 20, 42, 600, 40, 24, FontStyle.Bold, Palette.Text);
-        AddLabel(this, "Mouse e teclado sob seu controle", 21, 86, 600, 23, 10, FontStyle.Regular, Palette.Muted);
+        AddLabel(this, "Clique contínuo", 20, 52, 600, 40, 24, FontStyle.Bold, Palette.Text);
+        var tutorial = AddButton(this, "?", 776, 49, 44, 40, Palette.Frame, Palette.Text, ShowTutorial);
+        new ToolTip().SetToolTip(tutorial, "Como usar os pontos de toque");
 
         var statusCard = AddCard(20, 123, 800, 128);
         AddLabel(statusCard, "STATUS", 20, 16, 400, 20, 9, FontStyle.Bold, Palette.Muted);
         status = AddLabel(statusCard, "Pronto para iniciar", 20, 42, 460, 31, 17, FontStyle.Bold, Palette.Muted);
-        detail = AddLabel(statusCard, "Os cliques seguem a posição do cursor.", 20, 80, 465, 28, 9, FontStyle.Regular, Palette.Muted);
+        detail = AddLabel(statusCard, "", 20, 80, 465, 28, 9, FontStyle.Regular, Palette.Muted);
         startButton = AddButton(statusCard, "INICIAR", 516, 39, 119, 50, Palette.Teal, Palette.Background, StartClicking);
         stopButton = AddButton(statusCard, "PARAR", 648, 39, 119, 50, Palette.Coral, Palette.Background, StopClicking);
 
         var modeCard = AddCard(20, 267, 800, 65);
         AddLabel(modeCard, "MODO", 20, 22, 120, 22, 10, FontStyle.Bold, Palette.Muted);
-        mouseMode = AddButton(modeCard, "MOUSE", 492, 11, 132, 42, Palette.Frame, Palette.Text, () => SetMode(ClickMode.Mouse));
-        keyboardMode = AddButton(modeCard, "TECLADO", 636, 11, 132, 42, Palette.Frame, Palette.Text, () => SetMode(ClickMode.Keyboard));
+        mouseMode = AddButton(modeCard, "MOUSE", 391, 11, 119, 42, Palette.Frame, Palette.Text, () => SetMode(ClickMode.Mouse));
+        keyboardMode = AddButton(modeCard, "TECLADO", 519, 11, 119, 42, Palette.Frame, Palette.Text, () => SetMode(ClickMode.Keyboard));
+        pointsMode = AddButton(modeCard, "PONTOS", 647, 11, 121, 42, Palette.Frame, Palette.Text, () => SetMode(ClickMode.Points));
 
         var settingsCard = AddCard(20, 348, 800, 198);
         AddLabel(settingsCard, "VELOCIDADE", 20, 16, 250, 19, 9, FontStyle.Bold, Palette.Muted);
         speedValue = AddLabel(settingsCard, "", 352, 12, 105, 26, 13, FontStyle.Bold, Palette.Teal);
-        var speed = new ModernSlider(1, 30, settings.Cps)
+        var speed = new ModernSlider(1, 100, settings.Cps)
         {
             Location = new Point(20, 42), Size = new Size(425, 34)
         };
@@ -164,7 +174,6 @@ internal sealed class MainForm : Form
             SaveAndUpdate();
         };
         settingsCard.Controls.Add(delay);
-        AddLabel(settingsCard, "O atraso vale para a próxima ativação", 20, 165, 430, 20, 9, FontStyle.Regular, Palette.Muted);
 
         var divider = new Panel { Location = new Point(474, 16), Size = new Size(1, 166), BackColor = Palette.Border };
         settingsCard.Controls.Add(divider);
@@ -179,6 +188,12 @@ internal sealed class MainForm : Form
         targetKey.CaptureStarted += () => BeginCapture("Pressione a tecla que será repetida.");
         targetKey.CaptureCanceled += RestoreRegisteredHotkeys;
         targetKey.KeyCaptured += CaptureTargetKey;
+        recordButton = AddButton(settingsCard, "SELECIONAR PONTOS DE TOQUE", 494, 45, 278, 43,
+            Palette.TealDark, Palette.Text, ToggleRecording);
+        viewPointsButton = AddButton(settingsCard, "VER PONTOS", 494, 98, 130, 32,
+            Palette.Frame, Palette.Text, ShowPoints);
+        clearPointsButton = AddButton(settingsCard, "LIMPAR", 642, 98, 130, 32,
+            Palette.Frame, Palette.Text, ClearPoints);
         countTitle = AddLabel(settingsCard, "CLIQUES NESTA SESSÃO", 494, 114, 270, 19, 9, FontStyle.Bold, Palette.Muted);
         count = AddLabel(settingsCard, "0", 494, 137, 270, 41, 21, FontStyle.Bold, Palette.Teal);
 
@@ -186,18 +201,16 @@ internal sealed class MainForm : Form
         AddLabel(hotkeyCard, "ATALHOS GLOBAIS", 20, 12, 300, 19, 9, FontStyle.Bold, Palette.Amber);
         AddLabel(hotkeyCard, "INICIAR", 20, 37, 180, 18, 9, FontStyle.Bold, Palette.Muted);
         startKey = AddCapture(hotkeyCard, 20, 59, 180, 31, settings.StartHotkey, key => key.ToString());
-        startKey.CaptureStarted += () => BeginCapture("Pressione F2 a F12 para iniciar.");
+        startKey.CaptureStarted += () => BeginCapture("Pressione a tecla para iniciar.");
         startKey.CaptureCanceled += RestoreRegisteredHotkeys;
         startKey.KeyCaptured += (key, modifiers) => CaptureHotkey(true, key, modifiers);
         AddLabel(hotkeyCard, "PARAR", 234, 37, 180, 18, 9, FontStyle.Bold, Palette.Muted);
         stopKey = AddCapture(hotkeyCard, 234, 59, 180, 31, settings.StopHotkey, key => key.ToString());
-        stopKey.CaptureStarted += () => BeginCapture("Pressione F2 a F12 para parar.");
+        stopKey.CaptureStarted += () => BeginCapture("Pressione a tecla para parar.");
         stopKey.CaptureCanceled += RestoreRegisteredHotkeys;
         stopKey.KeyCaptured += (key, modifiers) => CaptureHotkey(false, key, modifiers);
-        AddLabel(hotkeyCard, "F2 A F12", 530, 57, 230, 28, 10, FontStyle.Bold, Palette.Amber);
+        AddLabel(hotkeyCard, "QUALQUER TECLA", 530, 57, 230, 28, 10, FontStyle.Bold, Palette.Amber);
 
-        AddLabel(this, "Sem limite de cliques ou tempo. Fechar a janela encerra a execução.",
-            21, 676, 790, 19, 9, FontStyle.Regular, Palette.Muted);
         speedValue.Text = $"{settings.Cps} CPS";
         delayValue.Text = $"{settings.DelaySeconds} s";
         RefreshMode();
@@ -206,9 +219,18 @@ internal sealed class MainForm : Form
 
     private void SetMode(ClickMode mode)
     {
+        if (settings.Mode == mode) return;
+        if (recorder is not null) FinishRecording();
+        engine.Stop();
         settings.Mode = mode;
         SaveAndUpdate();
         RefreshMode();
+        RefreshState();
+        if (mode == ClickMode.Points && !tutorialShown)
+        {
+            tutorialShown = true;
+            ShowTutorial();
+        }
     }
 
     private void SetMouseButton(MouseButton button)
@@ -222,15 +244,28 @@ internal sealed class MainForm : Form
     {
         mouseMode.Selected = settings.Mode == ClickMode.Mouse;
         keyboardMode.Selected = settings.Mode == ClickMode.Keyboard;
+        pointsMode.Selected = settings.Mode == ClickMode.Points;
         var mouse = settings.Mode == ClickMode.Mouse;
-        targetTitle.Text = mouse ? "BOTÃO DO MOUSE" : "TECLA PARA REPETIR";
-        targetKey.Visible = !mouse;
+        var points = settings.Mode == ClickMode.Points;
+        targetTitle.Text = points ? $"PONTOS GRAVADOS: {(recorder is null ? settings.Points.Count : recordedDraft.Count)}" :
+            mouse ? "BOTÃO DO MOUSE" : "TECLA PARA REPETIR";
+        targetKey.Visible = !mouse && !points;
+        recordButton.Visible = points;
+        recordButton.Text = recorder is null ? "SELECIONAR PONTOS DE TOQUE" : "FINALIZAR GRAVAÇÃO";
+        viewPointsButton.Visible = points;
+        clearPointsButton.Visible = points;
+        viewPointsButton.Enabled = recorder is null && settings.Points.Count > 0;
+        clearPointsButton.Enabled = recorder is null && settings.Points.Count > 0;
         for (var index = 0; index < mouseButtons.Length; index++)
         {
             mouseButtons[index].Visible = mouse;
             mouseButtons[index].Selected = (MouseButton)index == settings.MouseButton;
         }
-        countTitle.Text = mouse ? "CLIQUES NESTA SESSÃO" : "TECLAS NESTA SESSÃO";
+        countTitle.Location = new Point(494, points ? 141 : 114);
+        count.Location = new Point(494, points ? 160 : 137);
+        count.Size = new Size(270, points ? 30 : 41);
+        countTitle.Text = settings.Mode == ClickMode.Keyboard ? "TECLAS NESTA SESSÃO" :
+            "CLIQUES NESTA SESSÃO";
     }
 
     private void SaveAndUpdate()
@@ -243,6 +278,16 @@ internal sealed class MainForm : Form
 
     private void StartClicking()
     {
+        if (recorder is not null)
+        {
+            ShowNotice("Finalize a gravação antes de iniciar.");
+            return;
+        }
+        if (settings.Mode == ClickMode.Points && settings.Points.Count == 0)
+        {
+            ShowNotice("Grave ao menos um ponto antes de iniciar.");
+            return;
+        }
         if (settings.Mode == ClickMode.Keyboard &&
             (settings.Key == settings.StartHotkey || settings.Key == settings.StopHotkey))
         {
@@ -255,8 +300,108 @@ internal sealed class MainForm : Form
 
     private void StopClicking()
     {
+        if (recorder is not null)
+        {
+            FinishRecording();
+            return;
+        }
         engine.Stop();
         RefreshState();
+    }
+
+    private void ToggleRecording()
+    {
+        if (recorder is not null)
+        {
+            FinishRecording();
+            return;
+        }
+        engine.Stop();
+        recordedDraft.Clear();
+        try
+        {
+            recorder = new MouseRecorder(Handle, point =>
+            {
+                if (recordedDraft.Count < 10000) recordedDraft.Add(point);
+            });
+            ShowNotice("Clique nos lugares desejados. Finalize aqui ou em Parar.");
+        }
+        catch (Exception exception) { ShowNotice(exception.Message); }
+        RefreshMode();
+        RefreshState();
+    }
+
+    private void FinishRecording()
+    {
+        recorder?.Dispose();
+        recorder = null;
+        settings.Points = recordedDraft.ToList();
+        SaveAndUpdate();
+        RefreshMode();
+        ShowNotice(settings.Points.Count == 0 ? "Nenhum ponto foi gravado." :
+            $"{settings.Points.Count} pontos salvos na ordem dos cliques.");
+    }
+
+    private void ClearPoints()
+    {
+        if (recorder is not null) return;
+        engine.Stop();
+        settings.Points.Clear();
+        SaveAndUpdate();
+        RefreshMode();
+        RefreshState();
+    }
+
+    private void ShowPoints()
+    {
+        using var dialog = new Form
+        {
+            Text = "Pontos de toque", BackColor = Palette.Background, ForeColor = Palette.Text,
+            Font = Font, ClientSize = new Size(390, 330), FormBorderStyle = FormBorderStyle.FixedDialog,
+            MaximizeBox = false, MinimizeBox = false, StartPosition = FormStartPosition.CenterParent
+        };
+        AddLabel(dialog, "Pontos de toque", 18, 16, 350, 32, 17, FontStyle.Bold, Palette.Text);
+        var list = new ListBox
+        {
+            Location = new Point(18, 57), Size = new Size(354, 206),
+            BackColor = Palette.Panel, ForeColor = Palette.Text, BorderStyle = BorderStyle.FixedSingle,
+            Font = new Font("Consolas", 10)
+        };
+        foreach (var (point, index) in settings.Points.Select((point, index) => (point, index)))
+            list.Items.Add($"{index + 1,4}.  {point.Button,-8}  X {point.X,5}   Y {point.Y,5}");
+        dialog.Controls.Add(list);
+        AddButton(dialog, "REMOVER", 18, 276, 162, 39, Palette.CoralDark, Palette.Text, () =>
+        {
+            if (list.SelectedIndex < 0) return;
+            engine.Stop();
+            settings.Points.RemoveAt(list.SelectedIndex);
+            SaveAndUpdate();
+            RefreshMode();
+            var selected = list.SelectedIndex;
+            list.Items.Clear();
+            foreach (var (point, index) in settings.Points.Select((point, index) => (point, index)))
+                list.Items.Add($"{index + 1,4}.  {point.Button,-8}  X {point.X,5}   Y {point.Y,5}");
+            if (list.Items.Count > 0) list.SelectedIndex = Math.Min(selected, list.Items.Count - 1);
+        });
+        AddButton(dialog, "FECHAR", 210, 276, 162, 39, Palette.Frame, Palette.Text, dialog.Close);
+        dialog.ShowDialog(this);
+    }
+
+    private void ShowTutorial()
+    {
+        using var dialog = new Form
+        {
+            Text = "Como usar pontos de toque", BackColor = Palette.Background, ForeColor = Palette.Text,
+            Font = Font, ClientSize = new Size(470, 310), FormBorderStyle = FormBorderStyle.FixedDialog,
+            MaximizeBox = false, MinimizeBox = false, StartPosition = FormStartPosition.CenterParent
+        };
+        AddLabel(dialog, "Pontos de toque", 20, 18, 420, 34, 18, FontStyle.Bold, Palette.Text);
+        AddLabel(dialog, "1. Clique em Selecionar pontos de toque.", 20, 64, 430, 28, 10, FontStyle.Regular, Palette.Text);
+        AddLabel(dialog, "2. Clique nas posições desejadas, na ordem certa.", 20, 105, 430, 28, 10, FontStyle.Regular, Palette.Text);
+        AddLabel(dialog, "3. Clique em Finalizar gravação no painel.", 20, 146, 430, 28, 10, FontStyle.Regular, Palette.Text);
+        AddLabel(dialog, "4. Ajuste o CPS e clique em Iniciar.", 20, 187, 430, 28, 10, FontStyle.Regular, Palette.Text);
+        AddButton(dialog, "ENTENDI", 20, 247, 430, 42, Palette.TealDark, Palette.Text, dialog.Close);
+        dialog.ShowDialog(this);
     }
 
     private void BeginCapture(string instruction)
@@ -275,11 +420,12 @@ internal sealed class MainForm : Form
 
     private void CaptureTargetKey(Keys key, Keys modifiers)
     {
-        if (modifiers != Keys.None || !KeyOptions.All.Any(option => option.Key == key) ||
+        key &= Keys.KeyCode;
+        if (!KeyOptions.IsUsable(key) ||
             key == settings.StartHotkey || key == settings.StopHotkey)
         {
             RestoreRegisteredHotkeys();
-            ShowNotice("Escolha uma tecla diferente dos atalhos, sem modificadores.");
+            ShowNotice("Escolha uma tecla diferente dos atalhos.");
             return;
         }
         settings.Key = key;
@@ -290,10 +436,14 @@ internal sealed class MainForm : Form
 
     private void CaptureHotkey(bool forStart, Keys key, Keys modifiers)
     {
-        if (modifiers != Keys.None || !KeyOptions.Hotkeys.Contains(key))
+        key &= Keys.KeyCode;
+        var soloModifier = (key == Keys.ShiftKey && modifiers == Keys.Shift) ||
+            (key == Keys.ControlKey && modifiers == Keys.Control) ||
+            (key == Keys.Menu && modifiers == Keys.Alt);
+        if (!KeyOptions.IsUsable(key) || (modifiers != Keys.None && !soloModifier))
         {
             RestoreRegisteredHotkeys();
-            ShowNotice("Escolha uma tecla de F2 a F12, sem modificadores.");
+            ShowNotice("Escolha uma tecla válida, sem combinação.");
             return;
         }
         var requestedStart = forStart ? key : settings.StartHotkey;
@@ -304,13 +454,18 @@ internal sealed class MainForm : Form
             ShowNotice("Use teclas diferentes para iniciar, parar e repetir.");
             return;
         }
+        hotkeysAvailable = RegisterPair(requestedStart, requestedStop);
+        if (!hotkeysAvailable)
+        {
+            RestoreRegisteredHotkeys();
+            ShowNotice("Atalho em uso ou reservado pelo Windows. Escolha outro.");
+            return;
+        }
         settings.StartHotkey = requestedStart;
         settings.StopHotkey = requestedStop;
         startKey.Value = requestedStart;
         stopKey.Value = requestedStop;
         SaveAndUpdate();
-        hotkeysAvailable = RegisterPair(requestedStart, requestedStop);
-        if (!hotkeysAvailable) ShowNotice("Atalho em uso por outro app. Escolha outra tecla.");
     }
 
     private bool RegisterPair(Keys start, Keys stop)
@@ -338,18 +493,20 @@ internal sealed class MainForm : Form
         if (status is null) return;
         var state = engine.Snapshot();
         var waiting = state.Running && state.Remaining > TimeSpan.Zero;
-        status.Text = state.Error is not null ? "Entrada bloqueada" :
+        status.Text = recorder is not null ? "Gravando pontos" : state.Error is not null ? "Entrada bloqueada" :
             waiting ? "Preparando..." : state.Running ? "Em execução" : "Pronto para iniciar";
-        status.ForeColor = state.Error is not null ? Palette.Coral :
+        status.ForeColor = recorder is not null ? Palette.Amber : state.Error is not null ? Palette.Coral :
             waiting ? Palette.Amber : state.Running ? Palette.Teal : Palette.Muted;
         detail.Text = notice is not null && DateTime.UtcNow < noticeUntil ? notice :
-            state.Error ?? (waiting ? $"Começa em {state.Remaining.TotalSeconds:0.0} s. Posicione o cursor." :
-            state.Running ? "Continua até você parar." :
-            hotkeysAvailable ? "Use o botão ou o atalho para iniciar." : "Use os botões para controlar.");
+            recorder is not null ? $"{recordedDraft.Count} pontos capturados" :
+            state.Error ?? (waiting ? $"Começa em {state.Remaining.TotalSeconds:0.0} s" : "");
         if (notice is not null && DateTime.UtcNow >= noticeUntil) notice = null;
+        if (settings.Mode == ClickMode.Points)
+            targetTitle.Text = $"PONTOS GRAVADOS: {(recorder is null ? settings.Points.Count : recordedDraft.Count)}";
         count.Text = state.Count.ToString("N0", new System.Globalization.CultureInfo("pt-BR"));
-        startButton.Enabled = !state.Running;
-        stopButton.Enabled = state.Running;
+        startButton.Enabled = recorder is null && !state.Running;
+        stopButton.Enabled = recorder is not null || state.Running;
+        stopButton.Text = recorder is null ? "PARAR" : "FINALIZAR";
     }
 
     private CardPanel AddCard(int x, int y, int width, int height)
@@ -396,8 +553,14 @@ internal sealed class MainForm : Form
         return capture;
     }
 
-    private static string KeyName(Keys key) =>
-        KeyOptions.All.FirstOrDefault(option => option.Key == key).Label ?? key.ToString();
+    private static string KeyName(Keys key) => key switch
+    {
+        Keys.Space => "Espaço",
+        Keys.Back => "Backspace",
+        Keys.Escape => "Esc",
+        Keys.Return => "Enter",
+        _ => key.ToString()
+    };
 }
 
 internal sealed class KeyCaptureBox : Control
@@ -432,6 +595,16 @@ internal sealed class KeyCaptureBox : Control
 
     protected override bool IsInputKey(Keys keyData) => capturing || base.IsInputKey(keyData);
 
+    protected override bool ProcessCmdKey(ref Message message, Keys keyData)
+    {
+        if (capturing && KeyOptions.IsUsable(keyData & Keys.KeyCode))
+        {
+            CompleteCapture(keyData & Keys.KeyCode, keyData & Keys.Modifiers);
+            return true;
+        }
+        return base.ProcessCmdKey(ref message, keyData);
+    }
+
     protected override void OnMouseDown(MouseEventArgs e)
     {
         if (e.Button == MouseButtons.Left)
@@ -453,11 +626,9 @@ internal sealed class KeyCaptureBox : Control
         }
         if (capturing)
         {
-            capturing = false;
-            Invalidate();
+            CompleteCapture(e.KeyCode, e.Modifiers);
             e.Handled = true;
             e.SuppressKeyPress = true;
-            KeyCaptured?.Invoke(e.KeyCode, e.Modifiers);
             return;
         }
         base.OnKeyDown(e);
@@ -492,6 +663,13 @@ internal sealed class KeyCaptureBox : Control
         capturing = true;
         Invalidate();
         CaptureStarted?.Invoke();
+    }
+
+    private void CompleteCapture(Keys key, Keys modifiers)
+    {
+        capturing = false;
+        Invalidate();
+        KeyCaptured?.Invoke(key, modifiers);
     }
 }
 

@@ -1,47 +1,57 @@
 # AutoClicker
 
-Autoclicker para Windows feito em **C#**, com interface própria e dois modos: cliques do mouse ou pressionamentos de uma tecla. Depois de iniciado, repete a ação continuamente até você apertar **Parar**, usar o atalho de parada ou fechar o aplicativo.
+Autoclicker para Windows feito em **C# e Windows Forms**. Repete cliques do mouse, teclas ou uma sequência de pontos gravados na tela. Continua até você usar **Parar** ou o atalho configurado.
 
 ## Baixar e usar
 
-1. Abra [`release/AutoClicker.exe`](release/AutoClicker.exe).
-2. Escolha **Mouse** ou **Teclado**.
-3. Ajuste a velocidade (1 a 30 ações por segundo), o atraso inicial e o botão/tecla desejado. No modo Teclado, clique no campo da tecla e pressione a tecla que será repetida.
-4. Clique em **Iniciar** ou use **F6**. Para encerrar, clique em **Parar** ou use **F7**. Para trocar um atalho, clique no campo **Iniciar** ou **Parar** e pressione uma tecla de F2 a F12.
+1. Baixe [`release-pontos/AutoClicker.exe`](release-pontos/AutoClicker.exe) e abra no Windows 64 bits.
+2. Escolha **Mouse**, **Teclado** ou **Pontos**.
+3. Ajuste a velocidade entre **1 e 100 CPS** e, se necessário, o atraso inicial.
+4. Clique em **Iniciar** ou use **F6**. Para interromper, clique em **Parar** ou use **F7**.
 
-O `.exe` publicado é **independente**: em um Windows 64 bits, não é necessário instalar Python, .NET ou bibliotecas adicionais. As preferências são salvas automaticamente em `settings.json`, na mesma pasta do executável.
+O executável é **autocontido e de arquivo único**. Para usá-lo, não é preciso instalar Python, .NET ou outras bibliotecas. As preferências e os pontos são salvos em `settings.json` na mesma pasta do executável.
+
+## Mini tutorial: pontos de toque
+
+1. Selecione o modo **Pontos** e clique em **Selecionar pontos de toque**.
+2. Clique nos lugares desejados da tela, na ordem em que deverão ser repetidos. Cliques no painel do AutoClicker não entram na gravação. Botões esquerdo, direito e do meio são preservados.
+3. Volte ao painel e clique em **Finalizar gravação**. Você também pode usar **Parar** ou o atalho de parada.
+4. Confira a ordem em **Ver pontos**, ajuste o CPS e inicie. Ao chegar ao último ponto, a sequência recomeça e segue até você parar.
+
+O botão **?** na janela abre esse tutorial. A velocidade é o **total de cliques por segundo**, distribuído pelos pontos na ordem gravada, e não um CPS separado para cada ponto. A gravação aceita até 10.000 pontos. Um novo início de gravação substitui a sequência anterior ao finalizar.
 
 ## Controles
 
 | Opção | O que faz |
 | --- | --- |
-| Mouse | Repete cliques esquerdo, direito ou do meio na posição atual do cursor. |
-| Teclado | Repete a tecla capturada no campo na janela que estiver em foco. |
-| Velocidade | Define de 1 a 30 ações por segundo. Pode ser alterada durante a execução. |
-| Atraso inicial | Dá de 0 a 10 segundos para posicionar o cursor ou trocar de janela antes da primeira ação. |
-| Atalhos globais | Clique em cada campo e pressione uma tecla de F2 a F12 para iniciar ou parar. Funcionam mesmo com outra janela em foco. |
+| Mouse | Clica com o botão escolhido na posição atual do cursor. |
+| Teclado | Repete a tecla capturada ao clicar no campo e pressioná-la. Aceita as teclas virtuais que o Windows entrega ao aplicativo, incluindo teclas de mídia e função. |
+| Pontos | Repete as posições gravadas, com seus botões e sua ordem originais. |
+| Velocidade | Ajusta de 1 a 100 ações por segundo, inclusive durante a execução. |
+| Atraso inicial | Espera de 0 a 10 segundos antes da primeira ação. |
+| Atalhos globais | Clique nos campos **Iniciar** e **Parar** para escolher a tecla desejada. O app verifica se o Windows aceita o atalho antes de salvá-lo. |
 
-O aplicativo impede que a tecla repetida seja igual a um dos atalhos de início ou parada. Os atalhos padrão são **F6 para iniciar** e **F7 para parar**.
+As teclas padrão são **F6** para iniciar e **F7** para parar. A tecla repetida deve ser diferente desses dois atalhos. Para usar uma tecla atualmente ocupada por um atalho, troque primeiro o atalho. Como os atalhos são globais, escolher uma letra comum pode interceptá-la enquanto o app estiver aberto. Algumas teclas reservadas pelo próprio Windows podem não ser entregues ao aplicativo.
 
 ## Desempenho e implementação
 
-O núcleo usa a API `SendInput` do Windows para enviar eventos de mouse e teclado. O loop foi feito com tarefas assíncronas e espera cancelável, sem ficar consumindo CPU em uma espera contínua. A interface atualiza os contadores em intervalos curtos, separada da geração das entradas. A velocidade é limitada a 30 ações por segundo para manter o controle previsível.
+O núcleo usa a API `SendInput` do Windows para enviar os eventos. O agendamento usa um relógio de alta resolução, espera cancelável e resolução de temporizador de 1 ms enquanto está ativo. A interface continua separada do loop de entrada. No modo Pontos, um hook de mouse registra os cliques reais fora do aplicativo e ignora eventos simulados; a reprodução usa coordenadas absolutas da área de trabalho virtual, inclusive em múltiplos monitores.
 
-O projeto é escrito em C# com Windows Forms e compilado com .NET 10 como **arquivo único, autocontido, para Windows x64**. O código-fonte fica nesta pasta; o usuário final só precisa do executável em `release`.
+O limite configurável é de **100 CPS**. A taxa efetiva depende do Windows, da carga da máquina e do aplicativo que recebe os cliques; não há promessa de desempenho superior a outros programas.
 
 ## Compilar a partir do código
 
 Para desenvolver ou recompilar, instale o SDK do .NET 10 e execute nesta pasta:
 
 ```powershell
-dotnet publish AutoClicker.csproj -c Release -r win-x64 --self-contained true -o release
+dotnet publish AutoClicker.csproj -c Release -r win-x64 --self-contained true -o release-pontos
 ```
 
-O arquivo final será `release/AutoClicker.exe`.
+O resultado será `release-pontos/AutoClicker.exe`, em pasta separada para não substituir uma instância anterior que ainda esteja aberta nem compartilhar a configuração dela.
 
 ## Observações
 
-- O app funciona apenas no Windows. O executável fornecido é para sistemas 64 bits.
-- Janelas abertas como administrador podem bloquear entradas de um app sem elevação; nesse caso, execute o AutoClicker com o mesmo nível de permissão.
-- Se F6/F7 já estiverem reservadas por outro programa, selecione outros atalhos na interface.
-- Fechar o AutoClicker interrompe a execução. Ele não reinicia os cliques automaticamente ao ser aberto novamente.
+- Funciona apenas no Windows; o executável fornecido é para sistemas x64.
+- Janelas abertas como administrador podem bloquear entradas de um aplicativo sem elevação. Se necessário, execute ambos com o mesmo nível de permissão.
+- Se um atalho estiver reservado por outro programa, escolha outro na interface.
+- Fechar o aplicativo interrompe os cliques. Ele não reinicia automaticamente ao ser aberto novamente.

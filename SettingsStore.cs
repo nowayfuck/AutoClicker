@@ -12,50 +12,29 @@ internal sealed class AppSettings
     public Keys Key { get; set; } = Keys.Space;
     public Keys StartHotkey { get; set; } = Keys.F6;
     public Keys StopHotkey { get; set; } = Keys.F7;
+    public List<TouchPoint> Points { get; set; } = [];
 
-    public ClickSettings Click() => new(Mode, Cps, DelaySeconds, MouseButton, Key);
+    public ClickSettings Click() => new(Mode, Cps, DelaySeconds, MouseButton, Key, Points.ToArray());
 
     public void Normalize()
     {
         if (!Enum.IsDefined(Mode)) Mode = ClickMode.Mouse;
         if (!Enum.IsDefined(MouseButton)) MouseButton = MouseButton.Left;
-        Cps = Math.Clamp(Cps, 1, 30);
+        Cps = Math.Clamp(Cps, 1, 100);
         DelaySeconds = Math.Clamp(DelaySeconds, 0, 10);
-        if (!KeyOptions.All.Any(option => option.Key == Key)) Key = Keys.Space;
-        if (!KeyOptions.Hotkeys.Contains(StartHotkey)) StartHotkey = Keys.F6;
-        if (!KeyOptions.Hotkeys.Contains(StopHotkey) || StopHotkey == StartHotkey)
+        if (!KeyOptions.IsUsable(Key)) Key = Keys.Space;
+        Points ??= [];
+        Points = Points.Where(point => Enum.IsDefined(point.Button)).Take(10000).ToList();
+        if (!KeyOptions.IsUsable(StartHotkey)) StartHotkey = Keys.F6;
+        if (!KeyOptions.IsUsable(StopHotkey) || StopHotkey == StartHotkey)
             StopHotkey = StartHotkey == Keys.F7 ? Keys.F8 : Keys.F7;
     }
 }
 
 internal static class KeyOptions
 {
-    public static readonly Keys[] Hotkeys =
-    [
-        Keys.F2, Keys.F3, Keys.F4, Keys.F5, Keys.F6, Keys.F7,
-        Keys.F8, Keys.F9, Keys.F10, Keys.F11, Keys.F12
-    ];
-
-    public static readonly (string Label, Keys Key)[] All = Build();
-
-    private static (string, Keys)[] Build()
-    {
-        var values = new List<(string, Keys)>
-        {
-            ("Espaço", Keys.Space), ("Enter", Keys.Enter), ("Tab", Keys.Tab),
-            ("Backspace", Keys.Back), ("Esc", Keys.Escape),
-            ("Seta para cima", Keys.Up), ("Seta para baixo", Keys.Down),
-            ("Seta esquerda", Keys.Left), ("Seta direita", Keys.Right),
-            ("Insert", Keys.Insert), ("Delete", Keys.Delete),
-            ("Home", Keys.Home), ("End", Keys.End),
-            ("Page Up", Keys.PageUp), ("Page Down", Keys.PageDown)
-        };
-        for (var key = Keys.A; key <= Keys.Z; key++) values.Add((key.ToString(), key));
-        for (var number = 0; number <= 9; number++)
-            values.Add((number.ToString(), Keys.D0 + number));
-        for (var key = Keys.F1; key <= Keys.F12; key++) values.Add((key.ToString(), key));
-        return values.ToArray();
-    }
+    public static bool IsUsable(Keys key) => (key & Keys.Modifiers) == Keys.None &&
+        (int)(key & Keys.KeyCode) is >= 1 and <= 254;
 }
 
 internal static class SettingsStore
